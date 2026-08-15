@@ -8,6 +8,7 @@ type RegisterForm = {
   email: string
   password: string
   confirmPassword: string
+  userType: 'Owner' | 'Renter'
 }
 
 type RegisterResponse = {
@@ -21,6 +22,7 @@ const initialForm: RegisterForm = {
   email: '',
   password: '',
   confirmPassword: '',
+  userType: 'Renter',
 }
 
 export default function RegisterPage() {
@@ -30,7 +32,7 @@ export default function RegisterPage() {
   const [successMessage, setSuccessMessage] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  function handleChange(event: ChangeEvent<HTMLInputElement>) {
+  function handleChange(event: ChangeEvent<HTMLInputElement | HTMLSelectElement>) {
     const { name, value } = event.target
     setFormData((previous) => ({ ...previous, [name]: value }))
     setErrorMessage('')
@@ -59,6 +61,7 @@ export default function RegisterPage() {
           userName: formData.userName,
           email: formData.email,
           password: formData.password,
+          userType: formData.userType,
         }),
       })
       const payload = (await response.json()) as RegisterResponse
@@ -173,6 +176,20 @@ export default function RegisterPage() {
           )}
         </div>
 
+        <div style={styles.formGroup}>
+          <label style={styles.label}>I am registering as a... *</label>
+          <select
+            name="userType"
+            value={formData.userType}
+            onChange={handleChange}
+            style={styles.select}
+            required
+          >
+            <option value="Renter">Renter</option>
+            <option value="Owner">Product Owner</option>
+          </select>
+        </div>
+
         {errorMessage && <p style={styles.errorMessage}>{errorMessage}</p>}
         {successMessage && <p style={styles.successMessage}>{successMessage}</p>}
 
@@ -236,6 +253,16 @@ const styles = {
     borderRadius: '4px',
     fontFamily: 'inherit',
     boxSizing: 'border-box' as const,
+  },
+  select: {
+    padding: '0.75rem',
+    fontSize: '0.95rem',
+    border: '1px solid #ddd',
+    borderRadius: '4px',
+    fontFamily: 'inherit',
+    boxSizing: 'border-box' as const,
+    backgroundColor: 'white',
+    cursor: 'pointer',
   },
   errorMessage: {
     color: '#dc3545',

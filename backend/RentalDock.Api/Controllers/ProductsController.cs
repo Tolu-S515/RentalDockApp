@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using RentalDock.Api.Data;
 using RentalDock.Api.DTOs;
 using RentalDock.Api.Entities;
+using Microsoft.AspNetCore.Authorization;
 
 namespace RentalDock.Api.Controllers;
 
@@ -18,6 +19,7 @@ public class ProductsController : ControllerBase
         _context = context;
     }
 
+    [Authorize]
     [HttpPost]
     public async Task<IActionResult> CreateProduct([FromBody] AddProductRequest request)
     {

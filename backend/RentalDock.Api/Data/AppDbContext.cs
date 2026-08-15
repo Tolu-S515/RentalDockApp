@@ -24,6 +24,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
             entity.Property(x => x.FirstName).HasMaxLength(100).IsRequired();
             entity.Property(x => x.LastName).HasMaxLength(100).IsRequired();
             entity.Property(x => x.ProfileImageUrl).HasMaxLength(2048);
+
+            // Configure Table-Per-Hierarchy (TPH) inheritance
+            entity.HasDiscriminator<string>("UserType")
+                .HasValue<AdminUser>("AdminUser")
+                .HasValue<OwnerUser>("OwnerUser")
+                .HasValue<RenterUser>("RenterUser");
         });
 
         modelBuilder.Entity<Category>(entity =>
@@ -87,5 +93,71 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
             entity.HasOne(x => x.Reviewer).WithMany(x => x.Reviews)
                 .HasForeignKey(x => x.ReviewerId).OnDelete(DeleteBehavior.Restrict);
         });
+
+        // Seed example users for testing
+        SeedUsers(modelBuilder);
+    }
+
+    private static void SeedUsers(ModelBuilder modelBuilder)
+    {
+        var adminId = Guid.Parse("00000000-0000-0000-0000-000000000001");
+        var ownerId = Guid.Parse("00000000-0000-0000-0000-000000000002");
+        var renterId = Guid.Parse("00000000-0000-0000-0000-000000000003");
+
+        // Example Admin User
+        var adminUser = new AdminUser
+        {
+            Id = adminId,
+            UserName = "admin",
+            Email = "admin@rentaldock.com",
+            EmailConfirmed = true,
+            NormalizedUserName = "ADMIN",
+            NormalizedEmail = "ADMIN@RENTALDOCK.COM",
+            FirstName = "Admin",
+            LastName = "User",
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+            PasswordHash = "AQAAAAIAAYagAAAAEF1234567890abcdefghijklmnopqrst" // Placeholder
+        };
+
+        // Example Owner User
+        var ownerUser = new OwnerUser
+        {
+            Id = ownerId,
+            UserName = "owner",
+            Email = "owner@rentaldock.com",
+            EmailConfirmed = true,
+            NormalizedUserName = "OWNER",
+            NormalizedEmail = "OWNER@RENTALDOCK.COM",
+            FirstName = "John",
+            LastName = "Owner",
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+            PasswordHash = "AQAAAAIAAYagAAAAEF1234567890abcdefghijklmnopqrst" // Placeholder
+        };
+
+        // Example Renter User
+        var renterUser = new RenterUser
+        {
+            Id = renterId,
+            UserName = "renter",
+            Email = "renter@rentaldock.com",
+            EmailConfirmed = true,
+            NormalizedUserName = "RENTER",
+            NormalizedEmail = "RENTER@RENTALDOCK.COM",
+            FirstName = "Jane",
+            LastName = "Renter",
+            IsActive = true,
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+            PasswordHash = "AQAAAAIAAYagAAAAEF1234567890abcdefghijklmnopqrst" // Placeholder
+        };
+
+        // Seed each derived type separately
+        modelBuilder.Entity<AdminUser>().HasData(adminUser);
+        modelBuilder.Entity<OwnerUser>().HasData(ownerUser);
+        modelBuilder.Entity<RenterUser>().HasData(renterUser);
     }
 }

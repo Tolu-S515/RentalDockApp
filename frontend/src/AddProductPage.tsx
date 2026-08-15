@@ -31,7 +31,10 @@ export default function AddProductPage() {
     useEffect(() => {
         async function loadCategories() {
             try {
-                const response = await fetch('/api/categories')
+                const token = localStorage.getItem('accessToken')
+                const response = await fetch('/api/categories', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                })
                 if (!response.ok) {
                     throw new Error()
                 }
@@ -60,9 +63,10 @@ export default function AddProductPage() {
         setIsSubmitting(true)
 
         try {
+            const token = localStorage.getItem('accessToken')
             const response = await fetch('/api/products', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                 body: JSON.stringify({ ...product, ownerId })
             })
 

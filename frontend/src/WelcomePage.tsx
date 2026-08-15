@@ -46,9 +46,10 @@ export default function WelcomePage() {
     setIsSubmitting(true)
 
     try {
+      const token = localStorage.getItem('accessToken')
       const response = await fetch('/api/categories', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`, },
         body: JSON.stringify(category),
       })
 

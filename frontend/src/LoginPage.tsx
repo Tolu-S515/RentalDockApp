@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 
 type LoginResponse = {
   message?: string
+  token?: string
   userId?: string
   userName?: string
   email?: string
@@ -49,6 +50,9 @@ export default function LoginPage() {
       )
       if (payload.userId) {
         localStorage.setItem('loggedInUserId', payload.userId)
+      }
+      if (payload.token) {
+        localStorage.setItem('accessToken', payload.token)
       }
       navigate('/welcome')
     } catch {

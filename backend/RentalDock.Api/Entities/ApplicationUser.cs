@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Identity;
 
 namespace RentalDock.Api.Entities;
 
-public class ApplicationUser : IdentityUser<Guid>
+public abstract class ApplicationUser : IdentityUser<Guid>
 {
     public string FirstName { get; set; } = string.Empty;
 
@@ -21,4 +21,15 @@ public class ApplicationUser : IdentityUser<Guid>
     public ICollection<Booking> Bookings { get; set; } = [];
 
     public ICollection<Review> Reviews { get; set; } = [];
+
+    // Permission methods
+    public abstract bool CanEditProduct(Product product);
+    public abstract bool CanDeleteProduct(Product product);
+    public abstract bool CanManageCategories();
+    public abstract bool CanDeleteCategory();
+    public abstract bool CanManageUsers();
+    public abstract bool CanDeleteUser(ApplicationUser user);
+    public abstract bool CanViewAllBookings();
+    public abstract bool CanApproveReviews();
+    public abstract string GetRoleName();
 }

@@ -3,6 +3,8 @@ using Microsoft.EntityFrameworkCore;
 using RentalDock.Api.Data;
 using RentalDock.Api.DTOs;
 using RentalDock.Api.Entities;
+using Microsoft.AspNetCore.Authorization;
+
 
 namespace RentalDock.Api.Controllers;
 
@@ -17,6 +19,7 @@ public class CategoriesController : ControllerBase
         _context = context;
     }
 
+    [Authorize]
     [HttpPost]
     public async Task<IActionResult> CreateCategory([FromBody] CreateCategoryRequest request)
     {
