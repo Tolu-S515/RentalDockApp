@@ -1,5 +1,6 @@
 import { useState, type ChangeEvent, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from './AuthContext'
 
 type LoginResponse = {
   message?: string
@@ -11,6 +12,7 @@ type LoginResponse = {
 
 export default function LoginPage() {
   const navigate = useNavigate()
+  const { authenticate } = useAuth()
   const [formData, setFormData] = useState({ identifier: '', password: '' })
   const [errorMessage, setErrorMessage] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -44,16 +46,12 @@ export default function LoginPage() {
         return
       }
 
-      localStorage.setItem(
-        'loggedInUserName',
-        payload.userName ?? payload.email ?? formData.identifier,
-      )
-      if (payload.userId) {
-        localStorage.setItem('loggedInUserId', payload.userId)
+      if (!payload.token) {
+        setErrorMessage('The server did not return an access token.')
+        return
       }
-      if (payload.token) {
-        localStorage.setItem('accessToken', payload.token)
-      }
+
+      await authenticate(payload.token)
       navigate('/welcome')
     } catch {
       setErrorMessage('Unable to reach the server. Please try again.')

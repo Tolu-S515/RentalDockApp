@@ -1,5 +1,7 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from './AuthContext'
+import rentalDockLogo from './assets/RentalDock-Versatile-Transparent.svg'
 
 type ProductCard = {
   id: string
@@ -11,340 +13,458 @@ type ProductCard = {
   imageUrl?: string
 }
 
+type CategoryOption = {
+  id: string
+  name: string
+}
+
+type FilterOption = {
+  value: string
+  label: string
+}
+
+type FilterDropdownProps = {
+  label: string
+  value: string
+  options: FilterOption[]
+  isOpen: boolean
+  onToggle: () => void
+  onSelect: (value: string) => void
+}
+
+function FilterDropdown({
+  label,
+  value,
+  options,
+  isOpen,
+  onToggle,
+  onSelect,
+}: FilterDropdownProps) {
+  const selectedLabel = options.find((option) => option.value === value)?.label ?? label
+
+  return (
+    <div className="store-select-filter">
+      <button
+        className="store-dropdown-trigger"
+        type="button"
+        aria-haspopup="listbox"
+        aria-expanded={isOpen}
+        onClick={onToggle}
+      >
+        <span>{selectedLabel}</span>
+        <svg className={`store-filter-chevron ${isOpen ? 'is-open' : ''}`} viewBox="0 0 20 20" aria-hidden="true">
+          <path d="m5 7.5 5 5 5-5" />
+        </svg>
+      </button>
+
+      {isOpen && (
+        <div className="store-options-panel" role="listbox" aria-label={label}>
+          {options.map((option) => (
+            <button
+              className={option.value === value ? 'is-selected' : ''}
+              type="button"
+              role="option"
+              aria-selected={option.value === value}
+              key={option.value}
+              onClick={() => onSelect(option.value)}
+            >
+              <span>{option.label}</span>
+              {option.value === value && <span aria-hidden="true">✓</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function WelcomePage() {
-  const username = localStorage.getItem('loggedInUserName') || 'User'
+  const { token, user } = useAuth()
   const navigate = useNavigate()
+  const [products, setProducts] = useState<ProductCard[]>([])
+  const [isLoadingProducts, setIsLoadingProducts] = useState(true)
+  const [productsError, setProductsError] = useState('')
+  const [categories, setCategories] = useState<CategoryOption[]>([])
+  const [categoriesError, setCategoriesError] = useState('')
   const [showCategoryForm, setShowCategoryForm] = useState(false)
   const [category, setCategory] = useState({ name: '', description: '' })
-  const [errorMessage, setErrorMessage] = useState('')
-  const [successMessage, setSuccessMessage] = useState('')
+  const [formMessage, setFormMessage] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [products, setProducts] = useState<ProductCard[]>([])
-  const [productsError, setProductsError] = useState('')
-  const [isLoadingProducts, setIsLoadingProducts] = useState(true)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [appliedSearchQuery, setAppliedSearchQuery] = useState('')
+  const [categoryFilter, setCategoryFilter] = useState('')
+  const [categorySearch, setCategorySearch] = useState('')
+  const [minPrice, setMinPrice] = useState('')
+  const [maxPrice, setMaxPrice] = useState('')
+  const [appliedPriceRange, setAppliedPriceRange] = useState({ min: '', max: '' })
+  const [showPriceFilter, setShowPriceFilter] = useState(false)
+  const [periodFilter, setPeriodFilter] = useState('')
+  const [sortBy, setSortBy] = useState('recent')
+  const [openSelect, setOpenSelect] = useState<string | null>(null)
 
   useEffect(() => {
-    async function loadProducts() {
+    async function loadCategories() {
       try {
-        const response = await fetch('/api/products')
+        const response = await fetch('/api/categories')
+        if (!response.ok) throw new Error()
+        setCategories((await response.json()) as CategoryOption[])
+      } catch {
+        setCategoriesError('Unable to load categories.')
+      }
+    }
+
+    void loadCategories()
+  }, [])
+
+  useEffect(() => {
+    const abortController = new AbortController()
+
+    async function loadProducts() {
+      setIsLoadingProducts(true)
+      setProductsError('')
+
+      const parameters = new URLSearchParams()
+      if (appliedSearchQuery) parameters.set('search', appliedSearchQuery)
+      if (categoryFilter) parameters.set('categoryId', categoryFilter)
+      if (appliedPriceRange.min) parameters.set('minPrice', appliedPriceRange.min)
+      if (appliedPriceRange.max) parameters.set('maxPrice', appliedPriceRange.max)
+      if (periodFilter) parameters.set('pricingPeriod', periodFilter)
+      parameters.set('sort', sortBy)
+
+      try {
+        const response = await fetch(`/api/products?${parameters.toString()}`, {
+          signal: abortController.signal,
+        })
         if (!response.ok) throw new Error()
         setProducts((await response.json()) as ProductCard[])
-      } catch {
-        setProductsError('Unable to load products.')
+      } catch (error) {
+        if ((error as Error).name !== 'AbortError') {
+          setProductsError('Unable to load products right now.')
+        }
       } finally {
-        setIsLoadingProducts(false)
+        if (!abortController.signal.aborted) setIsLoadingProducts(false)
       }
     }
 
     void loadProducts()
-  }, [])
+    return () => abortController.abort()
+  }, [appliedSearchQuery, categoryFilter, appliedPriceRange, periodFilter, sortBy])
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function createCategory(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    setErrorMessage('')
-    setSuccessMessage('')
+    setFormMessage('')
     setIsSubmitting(true)
 
     try {
-      const token = localStorage.getItem('accessToken')
       const response = await fetch('/api/categories', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}`, },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify(category),
       })
 
       if (!response.ok) {
         const payload = (await response.json()) as { message?: string }
-        setErrorMessage(payload.message ?? 'Unable to create category.')
+        setFormMessage(payload.message ?? 'Unable to create category.')
         return
       }
 
-      setSuccessMessage('Category created successfully!')
       setCategory({ name: '', description: '' })
-      window.setTimeout(() => setShowCategoryForm(false), 1000)
+      setShowCategoryForm(false)
     } catch {
-      setErrorMessage('Unable to reach the server. Please try again.')
+      setFormMessage('Unable to reach the server.')
     } finally {
       setIsSubmitting(false)
     }
   }
 
+  const isOwner = user?.role === 'Owner'
+  const isAdmin = user?.role === 'Admin'
+  const categorySuggestions = useMemo(() => {
+    const query = categorySearch.trim().toLowerCase()
+    return categories.filter((categoryOption) =>
+      !query || categoryOption.name.toLowerCase().includes(query),
+    )
+  }, [categories, categorySearch])
+
   return (
-    <div style={styles.container}>
-      <div style={styles.header}>
-        <h1>Welcome, {username}!</h1>
-        <p style={styles.subtitle}>Manage your rental business</p>
-      </div>
+    <div className="renter-store">
+      <nav className="store-navbar" aria-label="RentalDock navigation">
+        <img className="store-logo" src={rentalDockLogo} alt="RentalDock" />
+      </nav>
 
-      <div style={styles.actionButtons}>
-        <button
-          type="button"
-          style={styles.primaryButton}
-          onClick={() => navigate('/addproduct')}
-        >
-          ➕ Add Product
-        </button>
-        <button
-          type="button"
-          style={styles.secondaryButton}
-          onClick={() => {
-            setShowCategoryForm((current) => !current)
-            setErrorMessage('')
-            setSuccessMessage('')
-          }}
-        >
-          {showCategoryForm ? '✕ Cancel' : '📁 Create Category'}
-        </button>
-      </div>
+      <main className="store-main">
+        <header className="store-hero">
+          <p className="store-eyebrow">Equipment, when you need it.</p>
+          <h1>Welcome, {user?.userName ?? 'renter'}.</h1>
+          <p>Explore equipment available to rent from owners near you.</p>
+        </header>
 
-      {showCategoryForm && (
-        <div style={styles.formContainer}>
-          <h2 style={styles.formTitle}>Create New Category</h2>
-          <form onSubmit={handleSubmit} style={styles.form}>
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Category Name *</label>
+        {(isOwner || isAdmin) && (
+          <div className="store-actions">
+            {isOwner && (
+              <button type="button" onClick={() => navigate('/addproduct')}>
+                Add product
+              </button>
+            )}
+            {isAdmin && (
+              <button type="button" onClick={() => setShowCategoryForm((shown) => !shown)}>
+                {showCategoryForm ? 'Close category form' : 'Create category'}
+              </button>
+            )}
+          </div>
+        )}
+
+        {showCategoryForm && isAdmin && (
+          <form className="dark-category-form" onSubmit={createCategory}>
+            <label>
+              Category name
               <input
-                type="text"
-                style={styles.input}
-                placeholder="e.g., Electronics, Tools, Sports"
                 value={category.name}
                 onChange={(event) =>
                   setCategory((current) => ({ ...current, name: event.target.value }))
                 }
                 required
               />
-            </div>
-
-            <div style={styles.formGroup}>
-              <label style={styles.label}>Description</label>
+            </label>
+            <label>
+              Description
               <textarea
-                style={{ ...styles.input, ...styles.textarea }}
-                placeholder="Describe this category (optional)"
-                rows={4}
                 value={category.description}
                 onChange={(event) =>
                   setCategory((current) => ({ ...current, description: event.target.value }))
                 }
               />
-            </div>
-
-            {errorMessage && <p style={styles.errorMessage}>{errorMessage}</p>}
-            {successMessage && <p style={styles.successMessage}>{successMessage}</p>}
-
-            <div style={styles.formActions}>
-              <button type="submit" style={styles.submitButton} disabled={isSubmitting}>
-                {isSubmitting ? 'Saving...' : 'Save Category'}
-              </button>
-            </div>
+            </label>
+            {formMessage && <p className="store-error">{formMessage}</p>}
+            <button disabled={isSubmitting} type="submit">
+              {isSubmitting ? 'Saving...' : 'Save category'}
+            </button>
           </form>
-        </div>
-      )}
-
-      <section style={styles.productsSection}>
-        <h2 style={styles.productsTitle}>Available rentals</h2>
-
-        {isLoadingProducts && <p>Loading products...</p>}
-        {productsError && <p style={styles.errorMessage}>{productsError}</p>}
-        {!isLoadingProducts && !productsError && products.length === 0 && (
-          <p>No products have been listed yet.</p>
         )}
 
-        <div style={styles.productGrid}>
-          {products.map((product) => (
-            <article key={product.id} style={styles.productCard}>
-              {product.imageUrl ? (
-                <img src={product.imageUrl} alt={product.name} style={styles.productImage} />
-              ) : (
-                <div style={styles.imagePlaceholder}>No image</div>
+        <section className="store-products">
+          <div className="store-section-heading">
+            <p>Browse the dock</p>
+            <h2>Available rentals</h2>
+          </div>
+
+          <div className="store-filter-navbar" aria-label="Product filters">
+            <form
+              className="store-search"
+              onSubmit={(event) => {
+                event.preventDefault()
+                setAppliedSearchQuery(searchQuery.trim())
+              }}
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m21 21-4.35-4.35m2.35-5.65a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z" />
+              </svg>
+              <input
+                type="search"
+                placeholder="Search rentals"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+              />
+            </form>
+
+            <div
+              className="store-category-autocomplete"
+              onBlur={(event) => {
+                if (!event.currentTarget.contains(event.relatedTarget)) {
+                  setOpenSelect(null)
+                }
+              }}
+            >
+              <label>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="m21 21-4.35-4.35m2.35-5.65a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z" />
+                </svg>
+                <input
+                  type="search"
+                  placeholder="Category"
+                  value={categorySearch}
+                  onFocus={() => {
+                    setShowPriceFilter(false)
+                    setOpenSelect('category')
+                  }}
+                  onChange={(event) => {
+                    setCategorySearch(event.target.value)
+                    setOpenSelect('category')
+                  }}
+                />
+              </label>
+
+              {openSelect === 'category' && (
+                <div className="store-options-panel store-category-options" role="listbox" aria-label="Category suggestions">
+                  <button
+                    className={!categoryFilter ? 'is-selected' : ''}
+                    type="button"
+                    role="option"
+                    aria-selected={!categoryFilter}
+                    onClick={() => {
+                      setCategoryFilter('')
+                      setCategorySearch('')
+                      setOpenSelect(null)
+                    }}
+                  >
+                    <span>All categories</span>
+                    {!categoryFilter && <span aria-hidden="true">✓</span>}
+                  </button>
+                  {categorySuggestions.map((categoryOption) => (
+                    <button
+                      className={categoryFilter === categoryOption.id ? 'is-selected' : ''}
+                      type="button"
+                      role="option"
+                      aria-selected={categoryFilter === categoryOption.id}
+                      key={categoryOption.id}
+                      onClick={() => {
+                        setCategoryFilter(categoryOption.id)
+                        setCategorySearch(categoryOption.name)
+                        setOpenSelect(null)
+                      }}
+                    >
+                      <span>{categoryOption.name}</span>
+                      {categoryFilter === categoryOption.id && <span aria-hidden="true">✓</span>}
+                    </button>
+                  ))}
+                  {categorySuggestions.length === 0 && (
+                    <p className="store-no-options">No matching categories</p>
+                  )}
+                  {categoriesError && <p className="store-no-options">{categoriesError}</p>}
+                </div>
               )}
-              <div style={styles.productDetails}>
-                <p style={styles.categoryName}>{product.categoryName}</p>
-                <h3 style={styles.productName}>{product.name}</h3>
-                <p style={styles.ownerName}>Listed by {product.ownerName}</p>
-                <p style={styles.productPrice}>
-                  ${product.price.toFixed(2)}/{product.pricingPeriod.toLowerCase()}
-                </p>
-              </div>
-            </article>
-          ))}
-        </div>
-      </section>
+            </div>
+
+            <div className="store-price-filter">
+              <button
+                className="store-price-trigger"
+                type="button"
+                aria-expanded={showPriceFilter}
+                onClick={() => {
+                  setOpenSelect(null)
+                  setShowPriceFilter((shown) => !shown)
+                }}
+              >
+                {appliedPriceRange.min || appliedPriceRange.max
+                  ? `$${appliedPriceRange.min || '0'} – $${appliedPriceRange.max || '∞'}`
+                  : 'Price'}
+                <svg className={`store-filter-chevron ${showPriceFilter ? 'is-open' : ''}`} viewBox="0 0 20 20" aria-hidden="true">
+                  <path d="m5 7.5 5 5 5-5" />
+                </svg>
+              </button>
+
+              {showPriceFilter && (
+                <form
+                  className="store-price-dropdown"
+                  aria-label="Filter by price range"
+                  onSubmit={(event) => {
+                    event.preventDefault()
+                    setAppliedPriceRange({ min: minPrice, max: maxPrice })
+                    setShowPriceFilter(false)
+                  }}
+                >
+                  <p>Enter Range</p>
+                  <div className="store-price-range">
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      aria-label="Minimum price"
+                      placeholder="Min"
+                      value={minPrice}
+                      onChange={(event) => setMinPrice(event.target.value)}
+                    />
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      aria-label="Maximum price"
+                      placeholder="Max"
+                      value={maxPrice}
+                      onChange={(event) => setMaxPrice(event.target.value)}
+                    />
+                    <button type="submit" aria-label="Apply price filter">
+                      <svg viewBox="0 0 24 24" aria-hidden="true">
+                        <path d="m21 21-4.35-4.35m2.35-5.65a8 8 0 1 1-16 0 8 8 0 0 1 16 0Z" />
+                      </svg>
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+
+            <FilterDropdown
+              label="Any period"
+              value={periodFilter}
+              options={[
+                { value: '', label: 'Any period' },
+                { value: 'Hour', label: 'Hourly' },
+                { value: 'Day', label: 'Daily' },
+                { value: 'Week', label: 'Weekly' },
+                { value: 'Month', label: 'Monthly' },
+              ]}
+              isOpen={openSelect === 'period'}
+              onToggle={() => {
+                setShowPriceFilter(false)
+                setOpenSelect((current) => current === 'period' ? null : 'period')
+              }}
+              onSelect={(value) => {
+                setPeriodFilter(value)
+                setOpenSelect(null)
+              }}
+            />
+
+            <FilterDropdown
+              label="Most recent"
+              value={sortBy}
+              options={[
+                { value: 'recent', label: 'Most recent' },
+                { value: 'price-low', label: 'Price: low to high' },
+                { value: 'price-high', label: 'Price: high to low' },
+              ]}
+              isOpen={openSelect === 'sort'}
+              onToggle={() => {
+                setShowPriceFilter(false)
+                setOpenSelect((current) => current === 'sort' ? null : 'sort')
+              }}
+              onSelect={(value) => {
+                setSortBy(value)
+                setOpenSelect(null)
+              }}
+            />
+          </div>
+
+          {isLoadingProducts && <p className="store-status">Loading products...</p>}
+          {productsError && <p className="store-error">{productsError}</p>}
+          {!isLoadingProducts && !productsError && products.length === 0 && (
+            <p className="store-status">No rentals match those filters.</p>
+          )}
+
+          <div className="store-product-grid">
+            {products.map((product) => (
+              <article className="store-product-card" key={product.id}>
+                {product.imageUrl ? (
+                  <img src={product.imageUrl} alt={product.name} />
+                ) : (
+                  <div className="store-image-placeholder">No image</div>
+                )}
+                <div className="store-product-copy">
+                  <p className="store-category">{product.categoryName}</p>
+                  <h3>{product.name}</h3>
+                  <p className="store-owner">By {product.ownerName}</p>
+                  <p className="store-price">
+                    ${product.price.toFixed(2)}
+                    <span> / {product.pricingPeriod.toLowerCase()}</span>
+                  </p>
+                </div>
+              </article>
+            ))}
+          </div>
+        </section>
+      </main>
     </div>
   )
-}
-
-const styles = {
-  container: {
-    maxWidth: '1100px',
-    margin: '0 auto',
-    padding: '2rem',
-  } as React.CSSProperties,
-  header: {
-    textAlign: 'center' as const,
-    marginBottom: '2rem',
-  },
-  subtitle: {
-    color: '#666',
-    fontSize: '1rem',
-    marginTop: '0.5rem',
-  },
-  actionButtons: {
-    display: 'flex',
-    gap: '1rem',
-    marginBottom: '2rem',
-    justifyContent: 'center',
-  },
-  primaryButton: {
-    padding: '0.75rem 1.5rem',
-    backgroundColor: '#28a745',
-    color: 'white',
-    border: 'none',
-    borderRadius: '4px',
-    fontWeight: '600',
-    fontSize: '1rem',
-    cursor: 'pointer',
-    transition: 'background-color 0.2s',
-  },
-  secondaryButton: {
-    padding: '0.75rem 1.5rem',
-    backgroundColor: '#0066cc',
-    color: 'white',
-    border: 'none',
-    borderRadius: '4px',
-    fontWeight: '600',
-    fontSize: '1rem',
-    cursor: 'pointer',
-    transition: 'background-color 0.2s',
-  },
-  formContainer: {
-    backgroundColor: '#fff',
-    padding: '2rem',
-    borderRadius: '8px',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
-    border: '1px solid #e0e0e0',
-  },
-  formTitle: {
-    marginBottom: '1.5rem',
-    fontSize: '1.2rem',
-    fontWeight: '600',
-    color: '#333',
-    borderBottom: '2px solid #0066cc',
-    paddingBottom: '0.5rem',
-  },
-  form: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-    gap: '1.5rem',
-  },
-  formGroup: {
-    display: 'flex',
-    flexDirection: 'column' as const,
-  },
-  label: {
-    fontWeight: '600',
-    marginBottom: '0.5rem',
-    fontSize: '0.95rem',
-    color: '#333',
-  },
-  input: {
-    padding: '0.75rem',
-    fontSize: '0.95rem',
-    border: '1px solid #ddd',
-    borderRadius: '4px',
-    fontFamily: 'inherit',
-    boxSizing: 'border-box' as const,
-  },
-  textarea: {
-    resize: 'vertical' as const,
-    fontFamily: 'inherit',
-  },
-  errorMessage: {
-    color: '#dc3545',
-    backgroundColor: '#f8d7da',
-    padding: '0.75rem',
-    borderRadius: '4px',
-    fontSize: '0.9rem',
-  },
-  successMessage: {
-    color: '#155724',
-    backgroundColor: '#d4edda',
-    padding: '0.75rem',
-    borderRadius: '4px',
-    fontSize: '0.9rem',
-  },
-  formActions: {
-    display: 'flex',
-    gap: '1rem',
-    marginTop: '1rem',
-  },
-  submitButton: {
-    padding: '0.75rem 1.5rem',
-    backgroundColor: '#0066cc',
-    color: 'white',
-    border: 'none',
-    borderRadius: '4px',
-    fontWeight: '600',
-    fontSize: '1rem',
-    cursor: 'pointer',
-    transition: 'background-color 0.2s',
-  },
-  productsSection: {
-    marginTop: '3rem',
-    textAlign: 'left' as const,
-  },
-  productsTitle: {
-    marginBottom: '1.5rem',
-    fontSize: '1.6rem',
-  },
-  productGrid: {
-    display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))',
-    gap: '1.5rem',
-  },
-  productCard: {
-    overflow: 'hidden',
-    backgroundColor: '#fff',
-    border: '1px solid #e0e0e0',
-    borderRadius: '10px',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
-  },
-  productImage: {
-    width: '100%',
-    height: '190px',
-    display: 'block',
-    objectFit: 'cover' as const,
-  },
-  imagePlaceholder: {
-    height: '190px',
-    display: 'grid',
-    placeItems: 'center',
-    color: '#777',
-    backgroundColor: '#eee',
-  },
-  productDetails: {
-    padding: '1rem',
-  },
-  categoryName: {
-    margin: 0,
-    color: '#0066cc',
-    fontSize: '0.8rem',
-    fontWeight: '700',
-    textTransform: 'uppercase' as const,
-  },
-  productName: {
-    margin: '0.4rem 0',
-    color: '#222',
-    fontSize: '1.15rem',
-  },
-  ownerName: {
-    margin: '0 0 1rem',
-    color: '#666',
-    fontSize: '0.9rem',
-  },
-  productPrice: {
-    margin: 0,
-    color: '#198754',
-    fontSize: '1.15rem',
-    fontWeight: '700',
-  },
 }

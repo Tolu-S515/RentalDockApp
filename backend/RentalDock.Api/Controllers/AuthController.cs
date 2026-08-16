@@ -2,6 +2,10 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using RentalDock.Api.Entities;
 using RentalDock.Api.Services;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
+using RentalDock.Api.Data;
 
 
 namespace RentalDock.Api.Controllers;
@@ -13,15 +17,18 @@ public class AuthController : ControllerBase
     private readonly UserManager<ApplicationUser> _userManager;
     private readonly SignInManager<ApplicationUser> _signInManager;
     private readonly JwtTokenService _jwtTokenService;
+    private readonly AppDbContext _context;
 
     public AuthController(
         UserManager<ApplicationUser> userManager,
         SignInManager<ApplicationUser> signInManager,
-        JwtTokenService jwtTokenService)
+        JwtTokenService jwtTokenService,
+        AppDbContext context)
     {
         _userManager = userManager;
         _signInManager = signInManager;
         _jwtTokenService = jwtTokenService;
+        _context = context;
     }
 
     [HttpPost("register")]
@@ -113,6 +120,33 @@ public class AuthController : ControllerBase
             message = "Login successful.",
             token,
             userId = user.Id,
+            userName = user.UserName,
+            email = user.Email,
+            role = user.GetRoleName()
+        });
+    }
+
+    [Authorize]
+    [HttpGet("me")]
+    public async Task<IActionResult> Me()
+    {
+        if (!Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var userId))
+        {
+            return Unauthorized();
+        }
+
+        var user = await _context.Users
+            .AsNoTracking()
+            .SingleOrDefaultAsync(user => user.Id == userId && user.IsActive);
+
+        if (user is null)
+        {
+            return Unauthorized();
+        }
+
+        return Ok(new
+        {
+            id = user.Id,
             userName = user.UserName,
             email = user.Email,
             role = user.GetRoleName()

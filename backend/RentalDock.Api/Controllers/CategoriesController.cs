@@ -19,7 +19,7 @@ public class CategoriesController : ControllerBase
         _context = context;
     }
 
-    [Authorize]
+    [Authorize(Roles = "Admin")]
     [HttpPost]
     public async Task<IActionResult> CreateCategory([FromBody] CreateCategoryRequest request)
     {

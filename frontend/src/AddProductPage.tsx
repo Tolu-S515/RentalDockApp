@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from './AuthContext'
 
 type Category = {
     id: string
@@ -8,6 +9,7 @@ type Category = {
 
 export default function AddProductPage() {
     const navigate = useNavigate()
+    const { token } = useAuth()
     const [errorMessage, setErrorMessage] = useState('')
     const [isSubmitting, setIsSubmitting] = useState(false)
     const [categories, setCategories] = useState<Category[]>([])
@@ -31,7 +33,6 @@ export default function AddProductPage() {
     useEffect(() => {
         async function loadCategories() {
             try {
-                const token = localStorage.getItem('accessToken')
                 const response = await fetch('/api/categories', {
                     headers: { 'Authorization': `Bearer ${token}` }
                 })
@@ -48,13 +49,11 @@ export default function AddProductPage() {
         }
 
         void loadCategories()
-    }, [])
+    }, [token])
 
     const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
         e.preventDefault()
-        const ownerId = localStorage.getItem('loggedInUserId')
-
-        if (!ownerId) {
+        if (!token) {
             setErrorMessage('Please log in again before adding a product.')
             return
         }
@@ -63,11 +62,10 @@ export default function AddProductPage() {
         setIsSubmitting(true)
 
         try {
-            const token = localStorage.getItem('accessToken')
             const response = await fetch('/api/products', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                body: JSON.stringify({ ...product, ownerId })
+                body: JSON.stringify(product)
             })
 
             if (!response.ok) {

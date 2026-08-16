@@ -4,6 +4,7 @@ using RentalDock.Api.Data;
 using RentalDock.Api.DTOs;
 using RentalDock.Api.Entities;
 using Microsoft.AspNetCore.Authorization;
+using System.Security.Claims;
 
 namespace RentalDock.Api.Controllers;
 
@@ -23,6 +24,10 @@ public class ProductsController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> CreateProduct([FromBody] AddProductRequest request)
     {
+        if (!Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out var ownerId))
+        {
+            return Unauthorized();
+        }
         
         if (string.IsNullOrWhiteSpace(request.Name))
         {
@@ -37,11 +42,6 @@ public class ProductsController : ControllerBase
         if (request.CategoryId == Guid.Empty)
         {
             return BadRequest(new { message = "Product category is required." });
-        }
-
-        if (request.OwnerId == Guid.Empty)
-        {
-            return BadRequest(new { message = "Product owner is required." });
         }
 
         if (string.IsNullOrWhiteSpace(request.Location))
@@ -59,7 +59,7 @@ public class ProductsController : ControllerBase
             return BadRequest(new { message = "Product deposit amount cannot be negative." });
         }
 
-        if (!await _context.Users.AnyAsync(user => user.Id == request.OwnerId))
+        if (!await _context.Users.AnyAsync(user => user.Id == ownerId && user.IsActive))
         {
             return BadRequest(new { message = "Product owner does not exist." });
         }
@@ -72,7 +72,7 @@ public class ProductsController : ControllerBase
 
         var product = new Product
         {   
-            OwnerId = request.OwnerId,
+            OwnerId = ownerId,
             Name = request.Name,
             Description = request.Description.Trim(),
             Price = request.Price,
@@ -104,12 +104,58 @@ public class ProductsController : ControllerBase
     }
 
     [HttpGet]
-    public async Task<IActionResult> GetProducts()
+    public async Task<IActionResult> GetProducts(
+        [FromQuery] string? search,
+        [FromQuery] Guid? categoryId,
+        [FromQuery] decimal? minPrice,
+        [FromQuery] decimal? maxPrice,
+        [FromQuery] PricingPeriod? pricingPeriod,
+        [FromQuery] string? sort = "recent")
     {
-        var products = await _context.Products
+        if (minPrice < 0 || maxPrice < 0)
+        {
+            return BadRequest(new { message = "Prices cannot be negative." });
+        }
+
+        if (minPrice.HasValue && maxPrice.HasValue && minPrice > maxPrice)
+        {
+            return BadRequest(new { message = "Minimum price cannot exceed maximum price." });
+        }
+
+        var query = _context.Products
             .AsNoTracking()
-            .Where(product => product.IsActive)
-            .OrderByDescending(product => product.CreatedAt)
+            .Where(product => product.IsActive);
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var term = search.Trim().ToLower();
+            query = query.Where(product =>
+                product.Name.ToLower().Contains(term) ||
+                product.Category.Name.ToLower().Contains(term) ||
+                product.Owner.FirstName.ToLower().Contains(term) ||
+                product.Owner.LastName.ToLower().Contains(term));
+        }
+
+        if (categoryId.HasValue)
+            query = query.Where(product => product.CategoryId == categoryId.Value);
+
+        if (minPrice.HasValue)
+            query = query.Where(product => product.Price >= minPrice.Value);
+
+        if (maxPrice.HasValue)
+            query = query.Where(product => product.Price <= maxPrice.Value);
+
+        if (pricingPeriod.HasValue)
+            query = query.Where(product => product.PricingPeriod == pricingPeriod.Value);
+
+        query = sort switch
+        {
+            "price-low" => query.OrderBy(product => product.Price),
+            "price-high" => query.OrderByDescending(product => product.Price),
+            _ => query.OrderByDescending(product => product.CreatedAt)
+        };
+
+        var products = await query
             .Select(product => new
             {
                 product.Id,
