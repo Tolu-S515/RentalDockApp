@@ -2,6 +2,8 @@ namespace RentalDock.Api.Entities;
 
 public class OwnerUser : ApplicationUser
 {
+    public ICollection<BusinessHours> BusinessHours { get; set; } = [];
+
     public override bool CanEditProduct(Product product)
     {
         // Owners can only edit their own products

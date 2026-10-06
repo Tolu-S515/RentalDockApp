@@ -13,6 +13,8 @@ namespace RentalDock.Api.Controllers;
 
 public class ProductsController : ControllerBase
 {
+    private const int MaxTurnoverMinutes = 7 * 24 * 60;
+
     private readonly AppDbContext _context;
 
     public ProductsController(AppDbContext context)
@@ -59,6 +61,11 @@ public class ProductsController : ControllerBase
             return BadRequest(new { message = "Product deposit amount cannot be negative." });
         }
 
+        if (request.TurnoverMinutes is < 0 or > MaxTurnoverMinutes)
+        {
+            return BadRequest(new { message = "Turnover time must be between 0 minutes and 7 days." });
+        }
+
         if (!await _context.Users.AnyAsync(user => user.Id == ownerId && user.IsActive))
         {
             return BadRequest(new { message = "Product owner does not exist." });
@@ -80,6 +87,7 @@ public class ProductsController : ControllerBase
             Condition = request.Condition,
             PricingPeriod = request.PricingPeriod,
             DepositAmount = request.DepositAmount,
+            TurnoverMinutes = request.TurnoverMinutes,
             ImageUrl = request.ImageUrl,
             Location = request.Location,
             IsActive = true
@@ -94,7 +102,29 @@ public class ProductsController : ControllerBase
     [HttpGet("{id}")]
     public async Task<IActionResult> GetProduct(Guid id)
     {
-        var product = await _context.Products.FindAsync(id);
+        var product = await _context.Products
+            .AsNoTracking()
+            .Where(product => product.Id == id && product.IsActive)
+            .Select(product => new
+            {
+                product.Id,
+                product.Name,
+                product.Description,
+                product.Condition,
+                product.Price,
+                product.PricingPeriod,
+                product.DepositAmount,
+                product.TurnoverMinutes,
+                product.ImageUrl,
+                product.Location,
+                product.CreatedAt,
+                product.CategoryId,
+                CategoryName = product.Category.Name,
+                product.OwnerId,
+                OwnerName = product.Owner.FirstName + " " + product.Owner.LastName
+            })
+            .SingleOrDefaultAsync();
+
         if (product is null)
         {
             return NotFound(new { message = "Product not found." });
@@ -128,12 +158,14 @@ public class ProductsController : ControllerBase
 
         if (!string.IsNullOrWhiteSpace(search))
         {
-            var term = search.Trim().ToLower();
+            var pattern = $"%{search.Trim()}%";
             query = query.Where(product =>
-                product.Name.ToLower().Contains(term) ||
-                product.Category.Name.ToLower().Contains(term) ||
-                product.Owner.FirstName.ToLower().Contains(term) ||
-                product.Owner.LastName.ToLower().Contains(term));
+                EF.Functions.ILike(product.Name, pattern) ||
+                EF.Functions.ILike(product.Description, pattern) ||
+                EF.Functions.ILike(product.Location, pattern) ||
+                EF.Functions.ILike(product.Category.Name, pattern) ||
+                EF.Functions.ILike(product.Owner.FirstName, pattern) ||
+                EF.Functions.ILike(product.Owner.LastName, pattern));
         }
 
         if (categoryId.HasValue)

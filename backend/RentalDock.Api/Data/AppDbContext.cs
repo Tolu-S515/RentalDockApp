@@ -14,6 +14,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
     public DbSet<Booking> Bookings => Set<Booking>();
     public DbSet<PaymentLog> PaymentLogs => Set<PaymentLog>();
     public DbSet<Review> Reviews => Set<Review>();
+    public DbSet<BusinessHours> BusinessHours => Set<BusinessHours>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -49,6 +50,8 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
             entity.Property(x => x.DepositAmount).HasPrecision(18, 2);
             entity.Property(x => x.Condition).HasConversion<string>().HasMaxLength(30);
             entity.Property(x => x.PricingPeriod).HasConversion<string>().HasMaxLength(20);
+            entity.ToTable(t => t.HasCheckConstraint(
+                "CK_Products_TurnoverMinutes", "\"TurnoverMinutes\" >= 0"));
             entity.HasOne(x => x.Owner).WithMany(x => x.Products)
                 .HasForeignKey(x => x.OwnerId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.Category).WithMany(x => x.Products)
@@ -61,8 +64,12 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
             entity.Property(x => x.DepositAmount).HasPrecision(18, 2);
             entity.Property(x => x.TotalAmount).HasPrecision(18, 2);
             entity.Property(x => x.Status).HasConversion<string>().HasMaxLength(30);
-            entity.ToTable(t => t.HasCheckConstraint(
-                "CK_Bookings_DateRange", "\"EndDateTime\" > \"StartDateTime\""));
+            entity.ToTable(t =>
+            {
+                t.HasCheckConstraint("CK_Bookings_DateRange", "\"EndDateTime\" > \"StartDateTime\"");
+                t.HasCheckConstraint("CK_Bookings_BlockedUntil", "\"BlockedUntil\" >= \"EndDateTime\"");
+            });
+            entity.HasIndex(x => new { x.ProductId, x.StartDateTime, x.BlockedUntil });
             entity.HasOne(x => x.Product).WithMany(x => x.Bookings)
                 .HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.Renter).WithMany(x => x.Bookings)
@@ -92,6 +99,16 @@ public class AppDbContext(DbContextOptions<AppDbContext> options)
                 .HasForeignKey(x => x.ProductId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne(x => x.Reviewer).WithMany(x => x.Reviews)
                 .HasForeignKey(x => x.ReviewerId).OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<BusinessHours>(entity =>
+        {
+            entity.HasIndex(x => new { x.OwnerId, x.DayOfWeek }).IsUnique();
+            entity.Property(x => x.DayOfWeek).HasConversion<string>().HasMaxLength(10);
+            entity.ToTable(t => t.HasCheckConstraint(
+                "CK_BusinessHours_TimeRange", "\"IsClosed\" OR \"CloseTime\" > \"OpenTime\""));
+            entity.HasOne(x => x.Owner).WithMany(x => x.BusinessHours)
+                .HasForeignKey(x => x.OwnerId).OnDelete(DeleteBehavior.Cascade);
         });
 
         // Seed example users for testing

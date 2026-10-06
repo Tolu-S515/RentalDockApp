@@ -11,6 +11,8 @@ public class Product
     public decimal Price { get; set; }
     public PricingPeriod PricingPeriod { get; set; }
     public decimal DepositAmount { get; set; }
+    // Cleaning/inspection buffer after each booking during which the product can't be booked.
+    public int TurnoverMinutes { get; set; }
     public string? ImageUrl { get; set; }
     public string Location { get; set; } = string.Empty;
     public bool IsActive { get; set; } = true;

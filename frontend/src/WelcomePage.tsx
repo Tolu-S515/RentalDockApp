@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from './AuthContext'
 import rentalDockLogo from './assets/RentalDock-Versatile-Transparent.svg'
 
@@ -207,6 +207,11 @@ export default function WelcomePage() {
             {isOwner && (
               <button type="button" onClick={() => navigate('/addproduct')}>
                 Add product
+              </button>
+            )}
+            {isOwner && (
+              <button type="button" onClick={() => navigate('/business-hours')}>
+                Business hours
               </button>
             )}
             {isAdmin && (
@@ -445,22 +450,24 @@ export default function WelcomePage() {
 
           <div className="store-product-grid">
             {products.map((product) => (
-              <article className="store-product-card" key={product.id}>
-                {product.imageUrl ? (
-                  <img src={product.imageUrl} alt={product.name} />
-                ) : (
-                  <div className="store-image-placeholder">No image</div>
-                )}
-                <div className="store-product-copy">
-                  <p className="store-category">{product.categoryName}</p>
-                  <h3>{product.name}</h3>
-                  <p className="store-owner">By {product.ownerName}</p>
-                  <p className="store-price">
-                    ${product.price.toFixed(2)}
-                    <span> / {product.pricingPeriod.toLowerCase()}</span>
-                  </p>
-                </div>
-              </article>
+              <Link className="store-product-link" to={`/products/${product.id}`} key={product.id}>
+                <article className="store-product-card">
+                  {product.imageUrl ? (
+                    <img src={product.imageUrl} alt={product.name} />
+                  ) : (
+                    <div className="store-image-placeholder">No image</div>
+                  )}
+                  <div className="store-product-copy">
+                    <p className="store-category">{product.categoryName}</p>
+                    <h3>{product.name}</h3>
+                    <p className="store-owner">By {product.ownerName}</p>
+                    <p className="store-price">
+                      ${product.price.toFixed(2)}
+                      <span> / {product.pricingPeriod.toLowerCase()}</span>
+                    </p>
+                  </div>
+                </article>
+              </Link>
             ))}
           </div>
         </section>

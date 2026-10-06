@@ -10,6 +10,7 @@ public class AddProductRequest
     public decimal Price { get; set; }
     public PricingPeriod PricingPeriod { get; set; }
     public decimal DepositAmount { get; set; }
+    public int TurnoverMinutes { get; set; }
     public string? ImageUrl { get; set; }
     public string Location { get; set; } = string.Empty;
 }

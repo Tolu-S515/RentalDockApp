@@ -7,6 +7,8 @@ public class Booking
     public Guid RenterId { get; set; }
     public DateTime StartDateTime { get; set; }
     public DateTime EndDateTime { get; set; }
+    // EndDateTime plus the product's turnover at the time of booking.
+    public DateTime BlockedUntil { get; set; }
     public decimal RentalSubtotal { get; set; }
     public decimal DepositAmount { get; set; }
     public decimal TotalAmount { get; set; }

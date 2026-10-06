@@ -7,6 +7,17 @@ type Category = {
     name: string
 }
 
+const turnoverOptions = [
+    { minutes: 0, label: 'No turnover' },
+    { minutes: 15, label: '15 minutes' },
+    { minutes: 30, label: '30 minutes' },
+    { minutes: 60, label: '1 hour' },
+    { minutes: 120, label: '2 hours' },
+    { minutes: 240, label: '4 hours' },
+    { minutes: 1440, label: '1 day' },
+    { minutes: 2880, label: '2 days' },
+]
+
 export default function AddProductPage() {
     const navigate = useNavigate()
     const { token } = useAuth()
@@ -22,6 +33,7 @@ export default function AddProductPage() {
         price: 0,
         pricingPeriod: '',
         depositAmount: 0,
+        turnoverMinutes: 0,
         imageUrl: '',
         location: ''
     })
@@ -217,6 +229,24 @@ export default function AddProductPage() {
                             required
                         />
                     </div>
+
+                    <div style={styles.formGroup}>
+                        <label style={styles.label}>Turnover Time</label>
+                        <select
+                            style={styles.input}
+                            value={product.turnoverMinutes}
+                            onChange={(e) => handleChange('turnoverMinutes', Number(e.target.value))}
+                        >
+                            {turnoverOptions.map((option) => (
+                                <option key={option.minutes} value={option.minutes}>
+                                    {option.label}
+                                </option>
+                            ))}
+                        </select>
+                        <p style={styles.hint}>
+                            Time after each rental for cleaning and inspection. Renters can't book during it.
+                        </p>
+                    </div>
                 </section>
 
                 {/* Media & Location */}
@@ -326,6 +356,11 @@ const styles = {
         fontFamily: 'inherit',
         transition: 'border-color 0.2s',
         boxSizing: 'border-box' as const
+    },
+    hint: {
+        color: '#666',
+        fontSize: '0.85rem',
+        marginTop: '0.4rem'
     },
     textarea: {
         resize: 'vertical' as const,

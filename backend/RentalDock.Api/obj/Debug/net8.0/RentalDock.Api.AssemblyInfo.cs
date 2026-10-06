@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("RentalDock.Api")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+d9ca33437db4e79b0d64e51dd5aa5b78be6f36fd")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+3ef0c5fa477928c4b01040bc3ea7ba325a40c3b6")]
 [assembly: System.Reflection.AssemblyProductAttribute("RentalDock.Api")]
 [assembly: System.Reflection.AssemblyTitleAttribute("RentalDock.Api")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

@@ -13,6 +13,35 @@ namespace RentalDock.Api.Controllers;
 [Route("api/[controller]")]
 public class BookingsController(AppDbContext context) : ControllerBase
 {
+    [AllowAnonymous]
+    [HttpGet("product/{productId:guid}/availability")]
+    public async Task<IActionResult> GetProductAvailability(Guid productId)
+    {
+        var productExists = await context.Products
+            .AsNoTracking()
+            .AnyAsync(product => product.Id == productId && product.IsActive);
+
+        if (!productExists)
+            return NotFound(new { message = "Product was not found or is inactive." });
+
+        var unavailableRanges = await context.Bookings
+            .AsNoTracking()
+            .Where(booking =>
+                booking.ProductId == productId &&
+                (booking.Status == BookingStatus.Pending ||
+                 booking.Status == BookingStatus.Confirmed ||
+                 booking.Status == BookingStatus.Active))
+            .OrderBy(booking => booking.StartDateTime)
+            .Select(booking => new BookingAvailabilityResponse(
+                booking.StartDateTime,
+                booking.EndDateTime,
+                booking.BlockedUntil,
+                booking.Status))
+            .ToListAsync();
+
+        return Ok(unavailableRanges);
+    }
+
     [HttpPost]
     public async Task<IActionResult> CreateBooking([FromBody] CreateBookingRequest request)
     {
@@ -46,12 +75,29 @@ public class BookingsController(AppDbContext context) : ControllerBase
         if (product.OwnerId == renterId)
             return BadRequest(new { message = "You cannot book your own product." });
 
+        // Owners without saved hours accept pickups and returns at any time.
+        var businessHours = await context.BusinessHours
+            .AsNoTracking()
+            .Where(hours => hours.OwnerId == product.OwnerId)
+            .ToListAsync();
+
+        if (businessHours.Count > 0 && !IsWithinBusinessHours(businessHours, start))
+            return BadRequest(new { message = "Pickup must be during the owner's business hours (UTC)." });
+
+        if (businessHours.Count > 0 && !IsWithinBusinessHours(businessHours, end))
+            return BadRequest(new { message = "Return must be during the owner's business hours (UTC)." });
+
+        // Each booking holds the product until its turnover ends, so the new booking
+        // can't start inside an existing turnover and its own turnover can't run into the next booking.
+        var blockedUntil = end.AddMinutes(product.TurnoverMinutes);
+
         var overlaps = await context.Bookings.AnyAsync(booking =>
             booking.ProductId == request.ProductId &&
-            booking.Status != BookingStatus.Cancelled &&
-            booking.Status != BookingStatus.Rejected &&
-            start < booking.EndDateTime &&
-            end > booking.StartDateTime);
+            (booking.Status == BookingStatus.Pending ||
+             booking.Status == BookingStatus.Confirmed ||
+             booking.Status == BookingStatus.Active) &&
+            start < booking.BlockedUntil &&
+            blockedUntil > booking.StartDateTime);
 
         if (overlaps)
             return Conflict(new { message = "The product is already booked during that time." });
@@ -63,6 +109,7 @@ public class BookingsController(AppDbContext context) : ControllerBase
             RenterId = renterId,
             StartDateTime = start,
             EndDateTime = end,
+            BlockedUntil = blockedUntil,
             RentalSubtotal = rentalSubtotal,
             DepositAmount = product.DepositAmount,
             TotalAmount = rentalSubtotal + product.DepositAmount
@@ -178,6 +225,17 @@ public class BookingsController(AppDbContext context) : ControllerBase
 
     private bool TryGetUserId(out Guid userId) =>
         Guid.TryParse(User.FindFirstValue(ClaimTypes.NameIdentifier), out userId);
+
+    // Business hours are stored as UTC times for now, matching the frontend.
+    private static bool IsWithinBusinessHours(List<BusinessHours> businessHours, DateTime utcTime)
+    {
+        var day = businessHours.SingleOrDefault(hours => hours.DayOfWeek == utcTime.DayOfWeek);
+        if (day is null || day.IsClosed)
+            return false;
+
+        var time = TimeOnly.FromDateTime(utcTime);
+        return time >= day.OpenTime && time <= day.CloseTime;
+    }
 
     private static decimal CalculateSubtotal(Product product, DateTime start, DateTime end)
     {
